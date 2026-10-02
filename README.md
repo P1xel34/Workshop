@@ -1,74 +1,63 @@
-# 📒 guestbook — стартовый репозиторий воркшопа
+from contextlib import asynccontextmanager
 
-Небольшая **гостевая книга** на FastAPI: можно оставить сообщение и посмотреть все оставленные. Данные хранятся в PostgreSQL.
+import psycopg
+from fastapi import FastAPI
+from pydantic import BaseModel
 
-## Что умеет
+from config import settings
 
-- `GET /` — приветствие
-- `GET /health` — проверка «жив ли сервис»
-- `GET /messages` — список сообщений (новые сверху)
-- `POST /messages` — добавить сообщение: тело `{"author": "...", "text": "..."}`
 
-## Текущее состояние: «работает у меня»
+GREETING = "Добро пожаловать в гостевую книгу!"
 
-Честно предупреждаем: сейчас проект заводится только у автора и только если звёзды сошлись. А именно:
 
-- зависимости лежат в `requirements.txt` и никак не зафиксированы;
-- адрес базы и **пароль зашиты прямо в `main.py`**;
-- нет ни `Dockerfile`, ни `compose.yaml` — базу нужно поднимать и настраивать руками;
-- нет `.gitignore`, нет `.env`.
+def connect():
+    return psycopg.connect(settings.database_url)
 
-Вот как автор запускает это у себя (и почему так оставлять нельзя):
 
-```bash
-pip install -r requirements.txt
-# ... где-то локально поднят PostgreSQL с базой guestbook и тем самым паролем из кода ...
-uvicorn main:app
-```
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    with connect() as conn:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS messages ("
+            "id SERIAL PRIMARY KEY, author TEXT, text TEXT)"
+        )
+    yield
 
-## 🎯 Ваша задача
 
-**Нужно получить** тот же проект, доведённый до прода:
+app = FastAPI(lifespan=lifespan)
 
-- зависимости зафиксированы через **uv** (`pyproject.toml` + `uv.lock`), версия Python закреплена;
-- есть **Dockerfile** и **.dockerignore**, образ собирается;
-- есть **compose.yaml**, поднимающий приложение **и** PostgreSQL одной командой, с правильным порядком запуска и хранением данных;
-- настройки собраны в один конфиг на **pydantic-settings**, в коде нет `os.environ` вразнобой;
-- **секретов нет ни в коде, ни в коммите**: они живут в `.env` (в `.gitignore`), а в репозитории лежит `.env.example`.
 
-**Бизнес-логику менять не нужно** (эндпоинты и SQL уже работают) — вы работаете с упаковкой, конфигурацией и запуском.
+class Message(BaseModel):
+    author: str
+    text: str
 
-## 🚀 Как начать
 
-1. Форкните репозиторий воркшопа к себе (кнопка **Fork**).
-2. Склонируйте форк и заведите рабочую ветку:
+@app.get("/")
+def index():
+    return {"message": GREETING}
 
-```bash
-git clone https://github.com/ВАШ-ЛОГИН/guestbook-workshop.git
-cd guestbook-workshop
-git switch -c to-prod
-```
 
-3. Выполнить задание, сверяясь с критериями.
+@app.get("/health")
+def health():
+    return {"status": "ok"}
 
-## ✅ Критерии готовности
 
-- [ ] Зависимости на **uv**: есть `pyproject.toml` и `uv.lock`, `requirements.txt` удалён, версия Python закреплена (`.python-version`)
-- [ ] Есть **`.gitignore`** с `.venv`, `.env`, `__pycache__`
-- [ ] Настройки собраны в **`config.py`** (pydantic-settings); в `main.py` нет зашитых адреса и пароля
-- [ ] Секретов нет ни в коде, ни в коммите: `.env` в `.gitignore`, в репозитории есть **`.env.example`**, в `compose.yaml` пароль через **`${...}`**
-- [ ] Есть **`Dockerfile`** (зависимости ставятся до кода, `--host 0.0.0.0`) и **`.dockerignore`** (без `.env`, `.git`, `.venv`)
-- [ ] **`compose.yaml`** поднимает `app` + `db`; наружу проброшен только `app`; есть `depends_on: service_healthy`, `healthcheck` и `volume`
-- [ ] **Приёмочный тест пройден:** сообщение добавляется, отображается и переживает `down`/`up`
-- [ ] `git grep -i supersecret` не находит ничего; работа влита в `main` через merge
+@app.get("/messages")
+def list_messages():
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT author, text FROM messages ORDER BY id DESC"
+        ).fetchall()
 
-## 🏁 Как завершить
+    return [{"author": author, "text": text} for author, text in rows]
 
-```bash
-git add .
-git commit -m "chore: гостевая книга доведена до прода (uv, Docker, Compose, конфиг)"
-git switch main
-git merge to-prod
-git push -u origin main
-```
 
+@app.post("/messages")
+def add_message(message: Message):
+    with connect() as conn:
+        conn.execute(
+            "INSERT INTO messages (author, text) VALUES (%s, %s)",
+            (message.author, message.text),
+        )
+
+    return {"ok": True}

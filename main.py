@@ -4,13 +4,14 @@ import psycopg
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-# ⚠️ Пока всё зашито прямо в код — это и предстоит исправить.
-DATABASE_URL = "postgresql://guestbook:supersecret123@localhost:5432/guestbook"
+from config import settings
+
+
 GREETING = "Добро пожаловать в гостевую книгу!"
 
 
 def connect():
-    return psycopg.connect(DATABASE_URL)
+    return psycopg.connect(settings.database_url)
 
 
 @asynccontextmanager
@@ -47,6 +48,7 @@ def list_messages():
         rows = conn.execute(
             "SELECT author, text FROM messages ORDER BY id DESC"
         ).fetchall()
+
     return [{"author": author, "text": text} for author, text in rows]
 
 
@@ -57,4 +59,5 @@ def add_message(message: Message):
             "INSERT INTO messages (author, text) VALUES (%s, %s)",
             (message.author, message.text),
         )
+
     return {"ok": True}
