@@ -6,7 +6,6 @@ from pydantic import BaseModel
 
 from config import settings
 
-
 GREETING = "Добро пожаловать в гостевую книгу!"
 
 

@@ -1,7 +1,13 @@
 .env
+.env.*
 .git
+.github
 .venv
 __pycache__
-*.pyc
-.gitignore
-README.md
+*.py[cod]
+.pytest_cache
+.ruff_cache
+.idea
+.vscode
+tests
+*.md

@@ -1,3 +1,4 @@
+from psycopg.conninfo import make_conninfo
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,9 +17,13 @@ class Settings(BaseSettings):
 
     @property
     def database_url(self) -> str:
-        return (
-            f"postgresql://{self.db_user}:{self.db_password}"
-            f"@{self.db_host}:{self.db_port}/{self.db_name}"
+        return make_conninfo(
+            host=self.db_host,
+            port=self.db_port,
+            user=self.db_user,
+            password=self.db_password,
+            dbname=self.db_name,
+            connect_timeout=5,
         )
 
 
